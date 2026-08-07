@@ -5,3 +5,4 @@ pandas
 pillow
 python-dotenv
 google-generativeai
+pypdf
