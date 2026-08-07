@@ -4,3 +4,4 @@ supabase
 pandas
 pillow
 python-dotenv
+google-generativeai
