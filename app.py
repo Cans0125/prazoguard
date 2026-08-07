@@ -14,6 +14,14 @@ import base64
 from io import BytesIO
 from PIL import Image
 
+import streamlit as st
+
+st.set_page_config(
+    page_title="PrazoGuard",
+    page_icon="logo.png",  # Apenas o nome do arquivo, porque estão na mesma pasta!
+    layout="wide",
+)
+
 def obter_qr_code_evolution(api_url, token, nome_instancia):
     try:
         base_url = api_url.split('/message/')[0] if '/message/' in api_url else api_url.rstrip('/')
