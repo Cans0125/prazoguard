@@ -1,0 +1,6 @@
+# Ignora arquivos de configuração sensíveis
+.env
+
+# Ignora pastas temporárias do Python e do Streamlit
+__pycache__/
+.streamlit/

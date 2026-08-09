@@ -1,0 +1,18 @@
+<<<<<<< HEAD
+streamlit
+requests
+supabase
+pandas
+pillow
+=======
+streamlit
+requests
+supabase
+pandas
+pillow
+python-dotenv
+google-generativeai
+pypdf
+resend
+stripe
+>>>>>>> a5e4b9f12fb4d16b8bfc7421a3e3a38fdefe9fec
