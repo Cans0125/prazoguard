@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 from datetime import datetime, timezone
 import os
 from dotenv import load_dotenv
