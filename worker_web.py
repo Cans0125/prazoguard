@@ -11,7 +11,7 @@ load_dotenv()
 
 app = Flask(__name__)
 
-IMAP_SERVER = "imap.gmail.com"
+IMAP_SERVER = "outlook.office365.com"
 EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_PASS = os.getenv("EMAIL_PASS")
 PASTA_DESTINO = "tribunal_inbox"
