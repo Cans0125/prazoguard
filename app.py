@@ -24,7 +24,7 @@ api_secret = os.environ.get("GA_API_SECRET", "yom4EITQR5eKX5MgLBjNsg")
 # --------------------------------
 
 # URL oficial de envio do Google Analytics (Não mexer aqui)
-url = f"https://google-analytics.com{measurement_id}&api_secret={api_secret}"
+url = f"https://www.google-analytics.com/mp/collect?measurement_id={measurement_id}&api_secret={api_secret}"
 
 # Estrutura de dados que o Google Analytics exige
 payload = {
