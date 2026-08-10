@@ -17,6 +17,9 @@ import streamlit.components.v1 as components
 import json
 import uuid
 
+# --- IMPORTAÇÕES DO ARQUIVO CENTRAL (logic.py) ---
+from logic import analisar_com_gemini, salvar_no_banco, enviar_alertas
+
 # --- CARREGA AS CHAVES SECRETAS DO ARQUIVO .ENV ---
 load_dotenv()
 
@@ -24,7 +27,6 @@ load_dotenv()
 measurement_id = os.environ.get("GA_MEASUREMENT_ID", "G-2C08DBH6ZW")
 api_secret = os.environ.get("GA_API_SECRET", "yom4EITQR5eKX5MgLBjNsg") 
 
-# Montagem correta e isolada da URL do Google Analytics
 base_url = "https://www.google-analytics.com/mp/collect"
 url_ga = f"{base_url}?measurement_id={measurement_id}&api_secret={api_secret}"
 
@@ -43,7 +45,6 @@ try:
     requests.post(url_ga, data=json.dumps(payload_ga), headers={'Content-Type': 'application/json'}, timeout=5)
 except Exception:
     pass
-# ---------------------------------------------------
 
 st.set_page_config(
     page_title="PrazoGuard - Gestão Inteligente de Prazos",
@@ -103,45 +104,15 @@ genai.configure(api_key=API_KEY_GEMINI)
 
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 
-# Configuração do Resend (E-mail)
-resend.api_key = os.getenv("RESEND_API_KEY")
+# Configuração do Resend e WhatsApp Padrão
 EMAIL_PADRAO = os.getenv("EMAIL_PADRAO", "denerpneto@hotmail.com")
 WHATSAPP_PADRAO = os.getenv("WHATSAPP_PADRAO", "5531999996982")
 
-# Configurações da API de WhatsApp (Evolution API)
 WHATSAPP_API_URL = os.getenv("WHATSAPP_API_URL")
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 
-# --- ESTRUTURA DA IA ---
-class Intimacao(BaseModel):
-    processo: str = Field(description="Número do processo no padrão CNJ")
-    advogado_ou_oab: str = Field(
-        description="Nome do advogado ou número da OAB extraído do documento"
-    )
-    prazo_dias: int = Field(description="Quantidade de dias do prazo processual")
-    resumo: str = Field(description="Resumo claro e direto do que deve ser feito")
-
-
-def analisar_com_gemini(texto_publicacao: str):
-    model = genai.GenerativeModel(
-        model_name="gemini-3.1-flash-lite",
-        generation_config={
-            "response_mime_type": "application/json",
-            "response_schema": Intimacao,
-        },
-        system_instruction=(
-            "Você é um assistente jurídico sênior especializado em extrair"
-            " prazos de Diários Oficiais e intimações."
-        ),
-    )
-    response = model.generate_content(
-        f"Analise a publicação e extraia os dados:\n\n{texto_publicacao}"
-    )
-    return Intimacao.model_validate_json(response.text)
-
-
 def gerar_minuta_com_gemini(processo, resumo):
-    model = genai.GenerativeModel(model_name="gemini-2.5-flash")
+    model = genai.GenerativeModel(model_name="gemini-3.1-flash-lite")
     prompt = (
         f"Com base no processo número {processo} e no resumo da intimação: '{resumo}',"
         " elabore uma minuta de petição preliminar profissional e formal, pronta"
@@ -150,8 +121,6 @@ def gerar_minuta_com_gemini(processo, resumo):
     response = model.generate_content(prompt)
     return response.text
 
-
-# --- FUNÇÕES DE SUPABASE E STATUS ---
 def checar_status_assinatura(user_id, email):
     try:
         resposta = (
@@ -195,21 +164,6 @@ def checar_status_assinatura(user_id, email):
         return "trial"
     return "inativo"
 
-
-def salvar_no_banco(processo, advogado_oab, prazo_dias, resumo):
-    try:
-        dados = {
-            "processo": processo,
-            "advogado_ou_oab": advogado_oab,
-            "prazo_dias": prazo_dias,
-            "resumo": resumo,
-            "status_kanban": "Nova Intimação",
-        }
-        supabase.table("processos").insert(dados).execute()
-    except Exception as e:
-        st.error(f"Erro ao salvar processo no Supabase: {e}")
-
-
 def atualizar_status_kanban(processo_id, novo_status):
     try:
         supabase.table("processos").update({"status_kanban": novo_status}).eq(
@@ -217,46 +171,6 @@ def atualizar_status_kanban(processo_id, novo_status):
         ).execute()
     except Exception as e:
         st.error(f"Erro ao atualizar Kanban: {e}")
-
-
-# --- FUNÇÕES DE ALERTA ---
-def enviar_alerta_email(email_destino, processo, advogado, prazo, resumo):
-    try:
-        corpo_email = f"""
-        <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
-            <h2 style="color: #1e3a8a;">⚖️ PrazoGuard - Alerta de Intimação</h2>
-            <p><b>Processo:</b> {processo}</p>
-            <p><b>Advogado/OAB Responsável:</b> {advogado}</p>
-            <p><b>Prazo Fatal:</b> <span style="color: #dc2626; font-weight: bold;">{prazo} dias úteis</span></p>
-            <p><b>Resumo:</b> {resumo}</p>
-        </div>
-        """
-        params = {
-            "from": "PrazoGuard <onboarding@resend.dev>",
-            "to": [email_destino],
-            "subject": f"🚨 URGENTE: Prazo de {prazo} dias - Proc. {processo}",
-            "html": corpo_email,
-        }
-        resend.Emails.send(params)
-    except Exception as e:
-        print(f"Erro no e-mail: {e}")
-
-
-def enviar_alerta_whatsapp(telefone_destino, processo, advogado, prazo, resumo):
-    headers = {"apikey": WHATSAPP_TOKEN, "Content-Type": "application/json"}
-    texto_msg = (
-        f"🚨 *PRAZOGUARD - NOVO PRAZO* 🚨\n\n"
-        f"📁 *Processo:* {processo}\n"
-        f"⚖️ *Advogado/OAB:* {advogado}\n"
-        f"⏳ *Prazo Fatal:* *{prazo} dias úteis*\n\n"
-        f"📋 *Resumo:* {resumo}"
-    )
-    payload = {"number": telefone_destino, "text": texto_msg}
-    try:
-        requests.post(WHATSAPP_API_URL, json=payload, headers=headers)
-    except Exception as e:
-        print(f"Erro WhatsApp: {e}")
-
 
 estilo_css = """
 <style>
@@ -282,11 +196,9 @@ section[data-testid="stSidebar"] { background-color: #0f172a; color: #f8fafc; }
 """
 st.markdown(estilo_css, unsafe_allow_html=True)
 
-# Gerenciamento de Sessão de Usuário (Auth)
 if "user" not in st.session_state:
     st.session_state.user = None
 
-# --- TELA DE AUTENTICAÇÃO (LOGIN / CADASTRO) ---
 if st.session_state.user is None:
     st.title("⚖️ PrazoGuard - Acesso ao Sistema")
     st.markdown(
@@ -302,7 +214,7 @@ if st.session_state.user is None:
             email_login = st.text_input("E-mail cadastrado")
             senha_login = st.text_input("Senha", type="password")
             btn_entrar = st.form_submit_button(
-                "Entrar no Sistema", use_container_width=True
+                "Entrar no Sistema", width='stretch'
             )
 
             if btn_entrar:
@@ -344,7 +256,6 @@ if st.session_state.user is None:
                     st.warning("Preencha todos os campos.")
 
 else:
-    # --- USUÁRIO AUTENTICADO COM SUCESSO ---
     usuario_atual = st.session_state.user
     status_assinatura = checar_status_assinatura(
         usuario_atual.id, usuario_atual.email
@@ -374,7 +285,7 @@ else:
         st.markdown("📧 **denerpneto@hotmail.com**")
         
         st.markdown("---")
-        if st.button("🚪 Sair / Logout", use_container_width=True):
+        if st.button("🚪 Sair / Logout", width='stretch'):
             supabase.auth.sign_out()
             st.session_state.user = None
             st.rerun()
@@ -392,13 +303,12 @@ else:
                     img_qr, mensagem = obter_qr_code_evolution(WHATSAPP_API_URL, WHATSAPP_TOKEN, nome_instancia_input)
                     if img_qr:
                         st.sidebar.success("Escaneie o QR Code abaixo com o WhatsApp:")
-                        st.sidebar.image(img_qr, use_container_width=True)
+                        st.sidebar.image(img_qr, width='stretch')
                     else:
                         st.sidebar.info(mensagem)
             else:
                 st.sidebar.error("Configure WHATSAPP_API_URL e WHATSAPP_TOKEN no seu .env")
 
-    # --- VERIFICAÇÃO DO ACESSO (ATIVO OU TRIAL) ---
     if status_assinatura in ["ativo", "trial"]:
         if status_assinatura == "trial":
             st.info(
@@ -430,7 +340,7 @@ else:
                 placeholder="Cole aqui...",
             )
 
-            if st.button("🤖 Processar e Notificar", use_container_width=True):
+            if st.button("🤖 Processar e Notificar", width='stretch'):
                 texto_para_analisar = ""
                 if arquivo_enviado is not None:
                     try:
@@ -445,46 +355,27 @@ else:
                 if texto_para_analisar.strip():
                     with st.spinner("Analisando com IA e notificando..."):
                         try:
+                            # Utiliza a função importada do logic.py
                             resultado = analisar_com_gemini(texto_para_analisar)
-                            salvar_no_banco(
-                                resultado.processo,
-                                resultado.advogado_ou_oab,
-                                resultado.prazo_dias,
-                                resultado.resumo,
-                            )
-                            if resultado.prazo_dias > 0:
-                                enviar_alerta_email(
-                                    usuario_atual.email,
-                                    resultado.processo,
-                                    resultado.advogado_ou_oab,
-                                    resultado.prazo_dias,
-                                    resultado.resumo,
+                            salvar_no_banco(resultado)
+                            
+                            telefone_alvo = WHATSAPP_PADRAO
+                            try:
+                                resp_adv = (
+                                    supabase.table("advogados")
+                                    .select("whatsapp")
+                                    .eq("user_id", usuario_atual.id)
+                                    .execute()
                                 )
+                                if resp_adv.data and len(resp_adv.data) > 0:
+                                    telefone_alvo = resp_adv.data[0].get("whatsapp", WHATSAPP_PADRAO)
+                            except Exception:
+                                pass
 
-                                telefone_alvo = WHATSAPP_PADRAO
-                                try:
-                                    resp_adv = (
-                                        supabase.table("advogados")
-                                        .select("whatsapp")
-                                        .eq("user_id", usuario_atual.id)
-                                        .execute()
-                                    )
-                                    if resp_adv.data and len(resp_adv.data) > 0:
-                                        telefone_alvo = resp_adv.data[0].get(
-                                            "whatsapp", WHATSAPP_PADRAO
-                                        )
-                                except Exception:
-                                    pass
+                            # Dispara os alertas via logic.py
+                            enviar_alertas(resultado, usuario_atual.email, telefone_alvo)
 
-                                enviar_alerta_whatsapp(
-                                    telefone_alvo,
-                                    resultado.processo,
-                                    resultado.advogado_ou_oab,
-                                    resultado.prazo_dias,
-                                    resultado.resumo,
-                                )
-
-                            st.success(f"Processo {resultado.processo} processado!")
+                            st.success(f"Processo {resultado.get('processo')} processado!")
                             st.rerun()
                         except Exception as e:
                             st.error(f"Erro: {e}")
@@ -515,9 +406,7 @@ else:
 
                 with col_k1:
                     st.markdown("### 📥 Nova Intimação")
-                    novos = df_processos[
-                        df_processos["status_kanban"] == "Nova Intimação"
-                    ]
+                    novos = df_processos[df_processos["status_kanban"] == "Nova Intimação"]
                     for _, row in novos.iterrows():
                         with st.container(border=True):
                             st.write(f"**Proc:** {row['processo']}")
@@ -529,9 +418,7 @@ else:
 
                 with col_k2:
                     st.markdown("### ⏳ Em Andamento")
-                    andamento = df_processos[
-                        df_processos["status_kanban"] == "Em Andamento"
-                    ]
+                    andamento = df_processos[df_processos["status_kanban"] == "Em Andamento"]
                     for _, row in andamento.iterrows():
                         with st.container(border=True):
                             st.write(f"**Proc:** {row['processo']}")
@@ -543,9 +430,7 @@ else:
 
                 with col_k3:
                     st.markdown("### ✅ Protocolado")
-                    protocolados = df_processos[
-                        df_processos["status_kanban"] == "Protocolado"
-                    ]
+                    protocolados = df_processos[df_processos["status_kanban"] == "Protocolado"]
                     for _, row in protocolados.iterrows():
                         with st.container(border=True):
                             st.write(f"**Proc:** {row['processo']}")
@@ -557,7 +442,7 @@ else:
         with aba_tabela:
             st.subheader("📋 Lista Completa de Prazos")
             if not df_processos.empty:
-                st.dataframe(df_processos, use_container_width=True, hide_index=True)
+                st.dataframe(df_processos, width='stretch', hide_index=True)
             else:
                 st.info("Nenhum registro encontrado.")
 
@@ -658,7 +543,7 @@ else:
                                     else:
                                         st.info("Nenhuma movimentação detalhada encontrada para este registro.")
                                 else:
-                                    st.warning("⚠️ Nenhum processo encontrado com este número no tribunal selecionado. (Processos em segredo de justiça não aparecem na API pública do CNJ).")
+                                    st.warning("⚠️ Nenhum processo encontrado com este número no tribunal selecionado.")
                             else:
                                 st.error(f"Erro ao consultar a API do DataJud (Código HTTP: {resp.status_code})")
                         except Exception as e:
@@ -701,7 +586,7 @@ else:
                         pd.DataFrame(resp_adv.data) if resp_adv.data else pd.DataFrame()
                     )
                     if not df_adv.empty:
-                        st.dataframe(df_adv, use_container_width=True, hide_index=True)
+                        st.dataframe(df_adv, width='stretch', hide_index=True)
                 except Exception:
                     pass
     else:
@@ -718,7 +603,7 @@ else:
                 ["Plano Individual (R$ 97 / mês)", "Plano Escritório (R$ 197 / mês)"],
             )
             if st.button(
-                "🚀 Assinar e Liberar Acesso Definitivo", use_container_width=True
+                "🚀 Assinar e Liberar Acesso Definitivo", width='stretch'
             ):
                 price_id = (
                     "price_cole_aqui_o_id_do_individual_97"
