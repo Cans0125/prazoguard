@@ -15,7 +15,7 @@ resend.api_key = os.getenv("RESEND_API_KEY")
 
 def analisar_com_gemini(texto):
     print("🧠 IA: Iniciando análise...")
-    model = genai.GenerativeModel("gemini-2.5-flash")
+    model = genai.GenerativeModel("gemini-3.1-flash-lite")
     prompt = f"Analise a intimação e extraia os dados em JSON (processo, advogado_ou_oab, prazo_dias, resumo):\n\n{texto}"
     response = model.generate_content(prompt)
     
