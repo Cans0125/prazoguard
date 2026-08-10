@@ -25,7 +25,7 @@ class Intimacao(BaseModel):
 def analisar_com_gemini(texto):
     print("🧠 IA: Iniciando análise...")
     model = genai.GenerativeModel(
-        model_name="gemini-2.5-flash",
+        model_name="gemini-3.1-flash-lite",
         generation_config={
             "response_mime_type": "application/json",
             "response_schema": Intimacao,
