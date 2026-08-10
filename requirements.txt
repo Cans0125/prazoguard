@@ -8,3 +8,4 @@ google-generativeai
 pypdf
 resend
 stripe
+flask
