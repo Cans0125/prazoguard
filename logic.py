@@ -6,6 +6,7 @@ import requests
 import google.generativeai as genai
 from supabase import create_client
 from dotenv import load_dotenv
+from pydantic import BaseModel, Field
 
 load_dotenv()
 
@@ -13,15 +14,33 @@ supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 resend.api_key = os.getenv("RESEND_API_KEY")
 
+from pydantic import BaseModel, Field
+
+class Intimacao(BaseModel):
+    processo: str = Field(description="Número do processo no padrão CNJ")
+    advogado_ou_oab: str = Field(description="Nome do advogado ou número da OAB")
+    prazo_dias: int = Field(description="Quantidade de dias do prazo processual")
+    resumo: str = Field(description="Resumo claro e direto do que deve ser feito")
+
 def analisar_com_gemini(texto):
     print("🧠 IA: Iniciando análise...")
-    model = genai.GenerativeModel("gemini-3.1-flash-lite")
-    prompt = f"Analise a intimação e extraia os dados em JSON (processo, advogado_ou_oab, prazo_dias, resumo):\n\n{texto}"
-    response = model.generate_content(prompt)
+    model = genai.GenerativeModel(
+        model_name="gemini-2.5-flash",
+        generation_config={
+            "response_mime_type": "application/json",
+            "response_schema": Intimacao,
+        }
+    )
     
-    texto_resposta = response.text.strip().replace("```json", "").replace("```", "")
-    print(f"🤖 IA respondeu: {texto_resposta}")
-    return json.loads(texto_resposta.strip())
+    response = model.generate_content(f"Analise a intimação e extraia os dados:\n\n{texto}")
+    
+    if not response.text:
+        raise ValueError("A IA retornou uma resposta vazia.")
+        
+    print(f"🤖 IA respondeu com sucesso.")
+    
+    # O Pydantic garante que o retorno seja um JSON perfeitamente válido
+    return json.loads(response.text.strip())
 
 def salvar_no_banco(dados):
     print(f"💾 Banco: Salvando processo {dados.get('processo')}...")
