@@ -124,7 +124,7 @@ class Intimacao(BaseModel):
 
 def analisar_com_gemini(texto_publicacao: str):
     model = genai.GenerativeModel(
-        model_name="gemini-2.5-flash",
+        model_name="gemini-3.1-flash-lite",
         generation_config={
             "response_mime_type": "application/json",
             "response_schema": Intimacao,
@@ -325,7 +325,7 @@ if st.session_state.user is None:
             email_cad = st.text_input("E-mail para cadastro")
             senha_cad = st.text_input("Crie uma senha forte", type="password")
             btn_cadastrar = st.form_submit_button(
-                "Criar Conta (30 dias Grátis)", use_container_width=True
+                "Criar Conta (30 dias Grátis)", width='stretch'
             )
 
             if btn_cadastrar:
