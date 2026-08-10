@@ -4,3 +4,6 @@
 # Ignora pastas temporárias do Python e do Streamlit
 __pycache__/
 .streamlit/
+.vs/
+tribunal_inbox/
+__pycache__/
