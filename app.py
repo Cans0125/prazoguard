@@ -15,22 +15,39 @@ import base64
 from io import BytesIO
 from PIL import Image
 import streamlit.components.v1 as components
+import json
+import uuid
 
-# Cole o seu código do Google Analytics dentro da string abaixo
-ga_code = """
-<!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-2C08DBH6ZW"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
+# --- PARTE SEGURA CONFIGURADA ---
+# O Python tenta ler do sistema. Se não achar, usa os valores padrão que você definir.
+measurement_id = os.environ.get("GA_MEASUREMENT_ID", "G-2C08DBH6ZW")
+api_secret = os.environ.get("GA_API_SECRET", "yom4EITQR5eKX5MgLBjNsg") 
+# --------------------------------
 
-  gtag('config', 'G-2C08DBH6ZW');
-</script>
-"""
+# URL oficial de envio do Google Analytics (Não mexer aqui)
+url = f"https://google-analytics.com{measurement_id}&api_secret={api_secret}"
 
-# Injeta a tag na página de forma invisível
-components.html(ga_code, height=1, width=1)
+# Estrutura de dados que o Google Analytics exige
+payload = {
+    "client_id": str(uuid.uuid4()),  
+    "events": [{
+        "name": "execucao_script_python",  
+        "params": {
+            "tecnologia": "python_backend",
+            "ambiente": "vs_code"
+        }
+    }]
+}
+
+# Envia os dados para o Google
+response = requests.post(url, data=json.dumps(payload), headers={'Content-Type': 'application/json'})
+
+# Verifica se o envio deu certo
+if response.status_code == 204:
+    print("Dados enviados com sucesso para o Google Analytics!")
+else:
+    print(f"Erro ao enviar dados. Status code: {response.status_code}")
+
 
 st.set_page_config(
     page_title="PrazoGuard",
