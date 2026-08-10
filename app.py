@@ -17,41 +17,38 @@ import streamlit.components.v1 as components
 import json
 import uuid
 
-# --- PARTE SEGURA CONFIGURADA ---
-# O Python tenta ler do sistema. Se não achar, usa os valores padrão que você definir.
+# --- CARREGA AS CHAVES SECRETAS DO ARQUIVO .ENV ---
+load_dotenv()
+
+# --- PARTE SEGURA CONFIGURADA DO GOOGLE ANALYTICS ---
 measurement_id = os.environ.get("GA_MEASUREMENT_ID", "G-2C08DBH6ZW")
 api_secret = os.environ.get("GA_API_SECRET", "yom4EITQR5eKX5MgLBjNsg") 
-# --------------------------------
 
-# URL oficial de envio do Google Analytics (Não mexer aqui)
-url = f"https://www.google-analytics.com/mp/collect?measurement_id={measurement_id}&api_secret={api_secret}"
+# Montagem correta e isolada da URL do Google Analytics
+base_url = "https://www.google-analytics.com/mp/collect"
+url_ga = f"{base_url}?measurement_id={measurement_id}&api_secret={api_secret}"
 
-# Estrutura de dados que o Google Analytics exige
-payload = {
+payload_ga = {
     "client_id": str(uuid.uuid4()),  
     "events": [{
         "name": "execucao_script_python",  
         "params": {
             "tecnologia": "python_backend",
-            "ambiente": "vs_code"
+            "ambiente": "render"
         }
     }]
 }
 
-# Envia os dados para o Google
-response = requests.post(url, data=json.dumps(payload), headers={'Content-Type': 'application/json'})
-
-# Verifica se o envio deu certo
-if response.status_code == 204:
-    print("Dados enviados com sucesso para o Google Analytics!")
-else:
-    print(f"Erro ao enviar dados. Status code: {response.status_code}")
-
+try:
+    requests.post(url_ga, data=json.dumps(payload_ga), headers={'Content-Type': 'application/json'}, timeout=5)
+except Exception:
+    pass
+# ---------------------------------------------------
 
 st.set_page_config(
-    page_title="PrazoGuard",
-    page_icon="logo.png",  # Se a imagem estiver em uma pasta, use ex: "assets/logo.png"
-    layout="wide"
+    page_title="PrazoGuard - Gestão Inteligente de Prazos",
+    page_icon="⚖️",
+    layout="wide",
 )
 
 def obter_qr_code_evolution(api_url, token, nome_instancia):
@@ -59,11 +56,9 @@ def obter_qr_code_evolution(api_url, token, nome_instancia):
         base_url = api_url.split('/message/')[0] if '/message/' in api_url else api_url.rstrip('/')
         headers = {"apikey": token, "Content-Type": "application/json"}
         
-        # 1. Tenta conectar na instância diretamente
         url_connect = f"{base_url}/instance/connect/{nome_instancia}"
         response = requests.get(url_connect, headers=headers)
         
-        # 2. Se a instância não existir (erro 404 ou similar), cria ela automaticamente agora
         if response.status_code != 200:
             url_create = f"{base_url}/instance/create"
             payload = {
@@ -74,12 +69,10 @@ def obter_qr_code_evolution(api_url, token, nome_instancia):
             resp_create = requests.post(url_create, json=payload, headers=headers)
             
             if resp_create.status_code in [200, 201]:
-                # Tenta buscar o QR code novamente logo após a criação
                 response = requests.get(url_connect, headers=headers)
             else:
                 return None, f"Erro ao criar a instância no servidor: {resp_create.text}"
 
-        # 3. Processa o retorno e extrai o QR Code em imagem
         if response.status_code == 200:
             dados = response.json()
             base64_qr = dados.get("base64")
@@ -98,9 +91,6 @@ def obter_qr_code_evolution(api_url, token, nome_instancia):
             
     except Exception as e:
         return None, f"Erro de conexão: {e}"
-
-# --- CARREGA AS CHAVES SECRETAS DO ARQUIVO .ENV ---
-load_dotenv()
 
 # Configuração do Supabase
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -122,7 +112,6 @@ WHATSAPP_PADRAO = os.getenv("WHATSAPP_PADRAO", "5531999996982")
 WHATSAPP_API_URL = os.getenv("WHATSAPP_API_URL")
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 
-
 # --- ESTRUTURA DA IA ---
 class Intimacao(BaseModel):
     processo: str = Field(description="Número do processo no padrão CNJ")
@@ -135,7 +124,7 @@ class Intimacao(BaseModel):
 
 def analisar_com_gemini(texto_publicacao: str):
     model = genai.GenerativeModel(
-        model_name="gemini-3.1-flash",
+        model_name="gemini-2.5-flash",
         generation_config={
             "response_mime_type": "application/json",
             "response_schema": Intimacao,
@@ -152,7 +141,7 @@ def analisar_com_gemini(texto_publicacao: str):
 
 
 def gerar_minuta_com_gemini(processo, resumo):
-    model = genai.GenerativeModel(model_name="gemini-3.1-flash")
+    model = genai.GenerativeModel(model_name="gemini-2.5-flash")
     prompt = (
         f"Com base no processo número {processo} e no resumo da intimação: '{resumo}',"
         " elabore uma minuta de petição preliminar profissional e formal, pronta"
@@ -269,13 +258,6 @@ def enviar_alerta_whatsapp(telefone_destino, processo, advogado, prazo, resumo):
         print(f"Erro WhatsApp: {e}")
 
 
-# --- INTERFACE VISUAL (STREAMLIT) ---
-st.set_page_config(
-    page_title="PrazoGuard - Gestão Inteligente de Prazos",
-    page_icon="⚖️",
-    layout="wide",
-)
-
 estilo_css = """
 <style>
 .stApp { background-color: #ffffff; }
@@ -386,7 +368,6 @@ else:
         st.markdown("### 👤 Conta Ativa")
         st.write(f"**{usuario_atual.email}**")
         
-        # --- SEÇÃO DE SUPORTE NA SIDEBAR ---
         st.markdown("---")
         st.markdown("### 📞 Precisa de Ajuda?")
         st.markdown("Tem alguma dúvida ou encontrou algum problema? Fale com a gente:")
@@ -398,8 +379,7 @@ else:
             st.session_state.user = None
             st.rerun()
 
-           # Defina o seu e-mail de administrador aqui
-    MEU_EMAIL_ADMIN = "denerpneto@hotmail.com"  # <--- Coloque o seu e-mail real de login aqui
+    MEU_EMAIL_ADMIN = "denerpneto@hotmail.com"
 
     if usuario_atual and usuario_atual.email == MEU_EMAIL_ADMIN:
         st.sidebar.markdown("---")
@@ -426,7 +406,6 @@ else:
                 " modo de testes gratuitos (30 dias). Aproveite todos os recursos!"
             )
 
-        # Abas do sistema
         (
             aba_kanban,
             aba_tabela,
@@ -441,7 +420,6 @@ else:
             "👥 Equipe",
         ])
 
-        # --- PAINEL LATERAL COM UPLOAD DE INTIMAÇÕES ---
         with st.sidebar:
             st.markdown("---")
             st.header("📥 Nova Intimação")
@@ -483,7 +461,6 @@ else:
                                     resultado.resumo,
                                 )
 
-                                # --- BUSCA O WHATSAPP DO ADVOGADO NO BANCO ---
                                 telefone_alvo = WHATSAPP_PADRAO
                                 try:
                                     resp_adv = (
@@ -499,7 +476,6 @@ else:
                                 except Exception:
                                     pass
 
-                                # --- CHAMA A FUNÇÃO DE ENVIO ---
                                 enviar_alerta_whatsapp(
                                     telefone_alvo,
                                     resultado.processo,
@@ -507,7 +483,6 @@ else:
                                     resultado.prazo_dias,
                                     resultado.resumo,
                                 )
-                           
 
                             st.success(f"Processo {resultado.processo} processado!")
                             st.rerun()
@@ -531,7 +506,6 @@ else:
         except Exception:
             df_processos = pd.DataFrame()
 
-        # --- ABA 1: QUADRO KANBAN ---
         with aba_kanban:
             st.subheader("📌 Fluxo de Trabalho (Kanban)")
             if not df_processos.empty:
@@ -580,7 +554,6 @@ else:
             else:
                 st.info("Nenhum processo cadastrado para o Kanban.")
 
-        # --- ABA 2: TABELA DE PRAZOS ---
         with aba_tabela:
             st.subheader("📋 Lista Completa de Prazos")
             if not df_processos.empty:
@@ -588,7 +561,6 @@ else:
             else:
                 st.info("Nenhum registro encontrado.")
 
-        # --- ABA 3: GERADOR DE MINUTAS COM IA ---
         with aba_minutas:
             st.subheader("✍️ Gerador de Minutas Preliminares com IA")
             if not df_processos.empty:
@@ -615,93 +587,85 @@ else:
             else:
                 st.info("Cadastre um processo primeiro para gerar minutas.")
 
-        
-        # --- ABA 4: CONSULTA OFICIAL (DATAJUD / CNJ) ---
         with aba_cnj:
             st.subheader("🔍 Consulta Oficial de Andamentos (DataJud - CNJ)")
             st.markdown("Consulte metadados e movimentações diretamente da base nacional unificada do Poder Judiciário.")
 
-        # Dicionário com os principais tribunais integrados à API Pública do DataJud
-        tribunais_datajud = {
-            "Tribunal de Justiça de São Paulo (TJSP)": "api_publica_tjsp",
-            "Tribunal de Justiça de Minas Gerais (TJMG)": "api_publica_tjmg",
-            "Tribunal de Justiça do Rio de Janeiro (TJRJ)": "api_publica_tjrj",
-            "Tribunal de Justiça do Rio Grande do Sul (TJRS)": "api_publica_tjrs",
-            "Tribunal de Justiça do Paraná (TJPR)": "api_publica_tjpr",
-            "Tribunal de Justiça de Santa Catarina (TJSC)": "api_publica_tjsc",
-            "Tribunal de Justiça do Distrito Federal (TJDFT)": "api_publica_tjdft",
-            "Tribunal de Justiça de Goiás (TJGO)": "api_publica_tjgo",
-        }
+            tribunais_datajud = {
+                "Tribunal de Justiça de São Paulo (TJSP)": "api_publica_tjsp",
+                "Tribunal de Justiça de Minas Gerais (TJMG)": "api_publica_tjmg",
+                "Tribunal de Justiça do Rio de Janeiro (TJRJ)": "api_publica_tjrj",
+                "Tribunal de Justiça do Rio Grande do Sul (TJRS)": "api_publica_tjrs",
+                "Tribunal de Justiça do Paraná (TJPR)": "api_publica_tjpr",
+                "Tribunal de Justiça de Santa Catarina (TJSC)": "api_publica_tjsc",
+                "Tribunal de Justiça do Distrito Federal (TJDFT)": "api_publica_tjdft",
+                "Tribunal de Justiça de Goiás (TJGO)": "api_publica_tjgo",
+            }
 
-        col_t1, col_t2 = st.columns([1, 1])
-        with col_t1:
-            tribunal_escolhido = st.selectbox("Selecione o Tribunal:", list(tribunais_datajud.keys()))
-        with col_t2:
-            cnj_busca = st.text_input("Número do Processo (CNJ):", placeholder="Ex: 10091315220248260224")
+            col_t1, col_t2 = st.columns([1, 1])
+            with col_t1:
+                tribunal_escolhido = st.selectbox("Selecione o Tribunal:", list(tribunais_datajud.keys()))
+            with col_t2:
+                cnj_busca = st.text_input("Número do Processo (CNJ):", placeholder="Ex: 10091315220248260224")
 
-        if st.button("Consultar Base Oficial do DataJud"):
-            if cnj_busca.strip():
-                with st.spinner("Buscando dados oficiais no DataJud (CNJ)..."):
-                    alias_tribunal = tribunais_datajud[tribunal_escolhido]
-                    url = f"https://api-publica.datajud.cnj.jus.br/{alias_tribunal}/_search"
-                    
-                    # Chave de acesso público padrão disponibilizada pelo CNJ para consultas à API Pública
-                    api_key_datajud = "APIKey cDZHYzlZa0JadVREZDJCendQbXY6SkJlTzNjLV9TRENyQk1RdnFKZGRQdw=="
-                    
-                    # Remove formatação do CNJ (deixa apenas números) para a busca na API
-                    numero_limpo = "".join(filter(str.isdigit, cnj_busca))
-                    
-                    payload = {
-                        "query": {
-                            "match": {
-                                "numeroProcesso": numero_limpo
+            if st.button("Consultar Base Oficial do DataJud"):
+                if cnj_busca.strip():
+                    with st.spinner("Buscando dados oficiais no DataJud (CNJ)..."):
+                        alias_tribunal = tribunais_datajud[tribunal_escolhido]
+                        url_dj = f"https://api-publica.datajud.cnj.jus.br/{alias_tribunal}/_search"
+                        
+                        api_key_datajud = "APIKey cDZHYzlZa0JadVREZDJCendQbXY6SkJlTzNjLV9TRENyQk1RdnFKZGRQdw=="
+                        numero_limpo = "".join(filter(str.isdigit, cnj_busca))
+                        
+                        payload_dj = {
+                            "query": {
+                                "match": {
+                                    "numeroProcesso": numero_limpo
+                                }
                             }
                         }
-                    }
-                    
-                    headers = {
-                        "Authorization": api_key_datajud,
-                        "Content-Type": "application/json"
-                    }
-                    
-                    try:
-                        resp = requests.post(url, json=payload, headers=headers)
-                        if resp.status_code == 200:
-                            dados = resp.json()
-                            hits = dados.get("hits", {}).get("hits", [])
-                            
-                            if hits:
-                                processo_info = hits[0]["_source"]
-                                st.success("Processo encontrado na base oficial do CNJ!")
+                        
+                        headers_dj = {
+                            "Authorization": api_key_datajud,
+                            "Content-Type": "application/json"
+                        }
+                        
+                        try:
+                            resp = requests.post(url_dj, json=payload_dj, headers=headers_dj)
+                            if resp.status_code == 200:
+                                dados = resp.json()
+                                hits = dados.get("hits", {}).get("hits", [])
                                 
-                                # Exibição organizada dos dados do processo
-                                st.markdown(f"**📁 Processo:** {processo_info.get('numeroProcesso')}")
-                                st.markdown(f"**🏛️ Tribunal:** {processo_info.get('tribunal')}")
-                                st.markdown(f"**⚖️ Classe:** {processo_info.get('classe', {}).get('nome', 'Não informada')}")
-                                
-                                data_ajuizamento = processo_info.get('dataAjuizamento', '')
-                                if data_ajuizamento:
-                                    st.markdown(f"**📅 Data de Ajuizamento:** {data_ajuizamento[:10]}")
-                                
-                                st.markdown("### 📋 Histórico de Movimentações:")
-                                movimentacoes = processo_info.get("movimentos", [])
-                                if movimentacoes:
-                                    for mov in movimentacoes[:10]: # Exibe as últimas 10 movimentações
-                                        data_mov = mov.get("dataHora", "")[:10]
-                                        nome_mov = mov.get("nome", "Movimentação")
-                                        st.write(f"- **{data_mov}**: {nome_mov}")
+                                if hits:
+                                    processo_info = hits[0]["_source"]
+                                    st.success("Processo encontrado na base oficial do CNJ!")
+                                    
+                                    st.markdown(f"**📁 Processo:** {processo_info.get('numeroProcesso')}")
+                                    st.markdown(f"**🏛️ Tribunal:** {processo_info.get('tribunal')}")
+                                    st.markdown(f"**⚖️ Classe:** {processo_info.get('classe', {}).get('nome', 'Não informada')}")
+                                    
+                                    data_ajuizamento = processo_info.get('dataAjuizamento', '')
+                                    if data_ajuizamento:
+                                        st.markdown(f"**📅 Data de Ajuizamento:** {data_ajuizamento[:10]}")
+                                    
+                                    st.markdown("### 📋 Histórico de Movimentações:")
+                                    movimentacoes = processo_info.get("movimentos", [])
+                                    if movimentacoes:
+                                        for mov in movimentacoes[:10]:
+                                            data_mov = mov.get("dataHora", "")[:10]
+                                            nome_mov = mov.get("nome", "Movimentação")
+                                            st.write(f"- **{data_mov}**: {nome_mov}")
+                                    else:
+                                        st.info("Nenhuma movimentação detalhada encontrada para este registro.")
                                 else:
-                                    st.info("Nenhuma movimentação detalhada encontrada para este registro.")
+                                    st.warning("⚠️ Nenhum processo encontrado com este número no tribunal selecionado. (Processos em segredo de justiça não aparecem na API pública do CNJ).")
                             else:
-                                st.warning("⚠️ Nenhum processo encontrado com este número no tribunal selecionado. (Lembre-se: processos em segredo de justiça não aparecem na API pública do CNJ).")
-                        else:
-                            st.error(f"Erro ao consultar a API do DataJud (Código HTTP: {resp.status_code})")
-                    except Exception as e:
-                        st.error(f"Erro de conexão com os servidores do DataJud: {e}")
-            else:
-                st.warning("Insira um número CNJ válido.")
+                                st.error(f"Erro ao consultar a API do DataJud (Código HTTP: {resp.status_code})")
+                        except Exception as e:
+                            st.error(f"Erro de conexão com os servidores do DataJud: {e}")
+                else:
+                    st.warning("Insira um número CNJ válido.")
        
-        # --- ABA 5: GESTÃO DE ADVOGADOS ---
         with aba_advogados:
             st.subheader("👥 Cadastro da Equipe Jurídica")
             col_form, col_lista = st.columns([1, 1.5])
@@ -741,7 +705,6 @@ else:
                 except Exception:
                     pass
     else:
-        # --- TELA DE PAYWALL (TRIAL EXPIRADO) ---
         st.warning(
             f"🔒 **Período de Teste Expirado para a conta:**"
             f" `{usuario_atual.email}`\n\nSeu período gratuito de 30 dias chegou ao"
@@ -767,8 +730,8 @@ else:
                         payment_method_types=["card"],
                         line_items=[{"price": price_id, "quantity": 1}],
                         mode="subscription",
-                        success_url="http://localhost:8501/?sucesso=true",
-                        cancel_url="http://localhost:8501/?cancelado=true",
+                        success_url="https://www.prazoguard.com.br/?sucesso=true",
+                        cancel_url="https://www.prazoguard.com.br/?cancelado=true",
                         customer_email=usuario_atual.email,
                     )
                     st.markdown(
