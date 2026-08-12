@@ -18,7 +18,7 @@ import json
 import uuid
 
 # --- IMPORTAÇÕES DO ARQUIVO CENTRAL (logic.py) ---
-from logic import analisar_com_gemini, salvar_no_banco, enviar_alertas
+from logic import analisar_com_gemini, salvar_no_banco, enviar_alertas, obter_qr_code_evolution
 
 # --- CARREGA AS CHAVES SECRETAS DO ARQUIVO .ENV ---
 load_dotenv()
