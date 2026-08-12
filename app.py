@@ -377,7 +377,7 @@ else:
             "👥 Equipe",
         ])
 
-       with st.sidebar:
+    with st.sidebar:
             st.markdown("---")
             st.header("📥 Nova Intimação")
             
