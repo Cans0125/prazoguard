@@ -84,3 +84,34 @@ def enviar_alertas(dados, email_usuario, tel_whatsapp):
         print(f"✅ WhatsApp respondeu: {resp.status_code} - Resposta: {resp.text}")
     except Exception as e:
         print(f"❌ ERRO WHATSAPP: {e}")
+
+        def obter_qr_code_evolution(api_url, token, instance_name):
+    import requests
+    import base64
+    from io import BytesIO
+    from PIL import Image
+    
+    try:
+        base_url = api_url.rstrip("/")
+        if "/message" in base_url:
+            base_url = base_url.split("/message")[0]
+            
+        url = f"{base_url}/instance/connect/{instance_name}"
+        headers = {"apikey": token}
+        
+        resp = requests.get(url, headers=headers)
+        if resp.status_code == 200:
+            dados = resp.json()
+            base64_str = dados.get("base64") or dados.get("qrcode", {}).get("base64")
+            if base64_str:
+                if "," in base64_str:
+                    base64_str = base64_str.split(",")[1]
+                img_bytes = base64.b64decode(base64_str)
+                img = Image.open(BytesIO(img_bytes))
+                return img, "QR Code gerado com sucesso!"
+            else:
+                return None, f"Instância já conectada ou sem QR Code pendente. Resposta: {dados}"
+        else:
+            return None, f"Erro {resp.status_code}: {resp.text}"
+    except Exception as e:
+        return None, f"Erro ao buscar QR Code: {str(e)}"
