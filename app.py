@@ -463,6 +463,7 @@ else:
             st.markdown("Consulte metadados e movimentações diretamente da base nacional unificada do Poder Judiciário.")
 
             tribunais_datajud = {
+                # --- TRIBUNAIS DE JUSTIÇA (Estaduais) ---
                 "Tribunal de Justiça de São Paulo (TJSP)": "api_publica_tjsp",
                 "Tribunal de Justiça de Minas Gerais (TJMG)": "api_publica_tjmg",
                 "Tribunal de Justiça do Rio de Janeiro (TJRJ)": "api_publica_tjrj",
@@ -471,6 +472,18 @@ else:
                 "Tribunal de Justiça de Santa Catarina (TJSC)": "api_publica_tjsc",
                 "Tribunal de Justiça do Distrito Federal (TJDFT)": "api_publica_tjdft",
                 "Tribunal de Justiça de Goiás (TJGO)": "api_publica_tjgo",
+                
+                # --- TRIBUNAIS REGIONAIS DO TRABALHO (Trabalhistas) ---
+                "TRT 1ª Região (RJ)": "api_publica_trt1",
+                "TRT 2ª Região (SP - Capital)": "api_publica_trt2",
+                "TRT 3ª Região (MG)": "api_publica_trt3",
+                "TRT 4ª Região (RS)": "api_publica_trt4",
+                "TRT 5ª Região (BA)": "api_publica_trt5",
+                "TRT 6ª Região (PE)": "api_publica_trt6",
+                "TRT 9ª Região (PR)": "api_publica_trt9",
+                "TRT 10ª Região (DF/TO)": "api_publica_trt10",
+                "TRT 15ª Região (SP - Interior/Campinas)": "api_publica_trt15",
+                "TRT 18ª Região (GO)": "api_publica_trt18",
             }
 
             col_t1, col_t2 = st.columns([1, 1])
