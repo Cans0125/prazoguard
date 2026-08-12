@@ -438,7 +438,7 @@ else:
                 else:
                     st.warning("Por favor, envie um PDF ou cole um texto válido antes de processar.")
 
-        with aba_kanban:
+    with aba_kanban:
             st.subheader("📌 Fluxo de Trabalho (Kanban)")
             if not df_processos.empty:
                 col_k1, col_k2, col_k3 = st.columns(3)
@@ -480,14 +480,14 @@ else:
             else:
                 st.info("Nenhum processo cadastrado para o Kanban.")
 
-        with aba_tabela:
+    with aba_tabela:
             st.subheader("📋 Lista Completa de Prazos")
             if not df_processos.empty:
                 st.dataframe(df_processos, use_container_width=True, hide_index=True)
             else:
                 st.info("Nenhum registro encontrado.")
 
-        with aba_minutas:
+    with aba_minutas:
             st.subheader("✍️ Gerador de Minutas Preliminares com IA")
             if not df_processos.empty:
                 lista_procs = df_processos["processo"].tolist()
@@ -513,7 +513,7 @@ else:
             else:
                 st.info("Cadastre um processo primeiro para gerar minutas.")
 
-        with aba_cnj:
+    with aba_cnj:
             st.subheader("🔍 Consulta Oficial de Andamentos (DataJud - CNJ)")
             st.markdown("Consulte metadados e movimentações diretamente da base nacional unificada do Poder Judiciário.")
 
