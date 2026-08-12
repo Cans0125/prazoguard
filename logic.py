@@ -1,4 +1,3 @@
-# logic.py
 import os
 import json
 import resend
@@ -13,8 +12,6 @@ load_dotenv()
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 resend.api_key = os.getenv("RESEND_API_KEY")
-
-from pydantic import BaseModel, Field
 
 class Intimacao(BaseModel):
     processo: str = Field(description="Número do processo no padrão CNJ")
@@ -38,13 +35,11 @@ def analisar_com_gemini(texto):
         raise ValueError("A IA retornou uma resposta vazia.")
         
     print(f"🤖 IA respondeu com sucesso.")
-    
-    # O Pydantic garante que o retorno seja um JSON perfeitamente válido
     return json.loads(response.text.strip())
 
 def salvar_no_banco(dados):
     print(f"💾 Banco: Salvando processo {dados.get('processo')}...")
-    response = supabase.table("processos").insert({
+    supabase.table("processos").insert({
         "processo": dados.get("processo"),
         "advogado_ou_oab": dados.get("advogado_ou_oab"),
         "prazo_dias": dados.get("prazo_dias"),
@@ -85,8 +80,7 @@ def enviar_alertas(dados, email_usuario, tel_whatsapp):
     except Exception as e:
         print(f"❌ ERRO WHATSAPP: {e}")
 
-        def obter_qr_code_evolution(api_url, token, instance_name):
-    import requests
+def obter_qr_code_evolution(api_url, token, instance_name):
     import base64
     from io import BytesIO
     from PIL import Image
