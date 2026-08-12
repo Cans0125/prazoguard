@@ -72,16 +72,9 @@ def enviar_alertas(dados, email_usuario, tel_whatsapp):
             "number": tel_whatsapp, 
             "text": f"🚨 *NOVO PRAZO* 🚨\nProcesso: {dados.get('processo')}\nResumo: {dados.get('resumo')}"
         }
-       print(f"📱 WhatsApp: Tentando enviar para {tel_whatsapp}...")
-    try:
-        payload = {
-            "number": tel_whatsapp, 
-            "text": f"🚨 *NOVO PRAZO* 🚨\nProcesso: {dados.get('processo')}\nResumo: {dados.get('resumo')}"
-        }
         
-        # Pega a URL base da variável de ambiente e adiciona a rota certa da Evolution API
         base_url_wa = os.getenv("WHATSAPP_API_URL").rstrip("/")
-        url_completa = f"{base_url_wa}/message/sendText/main"
+        url_completa = f"{base_url_wa}/message/sendText/prazoguard"
         
         resp = requests.post(
             url_completa, 
