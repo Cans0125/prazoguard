@@ -377,18 +377,17 @@ else:
             "👥 Equipe",
         ])
 
-        with st.sidebar:
+       with st.sidebar:
             st.markdown("---")
             st.header("📥 Nova Intimação")
-            arquivo_enviado = st.file_uploader("Carregar PDF:", type=["pdf"])
-            texto_entrada = st.text_area(
-                "Ou cole o texto da publicação:",
-                height=120,
-                placeholder="Cole aqui...",
-            )
-
-            if st.button("🤖 Processar e Notificar", use_container_width=True):
-                texto_para_analisar = ""
+            
+            # Abas na barra lateral para escolher entre PDF ou Texto
+            tipo_entrada = st.radio("Forma de Envio:", ["📄 Enviar PDF", "📝 Colar Texto"], horizontal=True)
+            
+            texto_para_analisar = ""
+            
+            if tipo_entrada == "📄 Enviar PDF":
+                arquivo_enviado = st.file_uploader("Arraste o PDF aqui:", type=["pdf"])
                 if arquivo_enviado is not None:
                     try:
                         reader = PdfReader(arquivo_enviado)
@@ -396,15 +395,26 @@ else:
                             texto_para_analisar += page.extract_text() or ""
                     except Exception as e:
                         st.error(f"Erro ao ler PDF: {e}")
-                elif texto_entrada.strip():
+            else:
+                texto_entrada = st.text_area(
+                    "Cole o texto da publicação:",
+                    height=120,
+                    placeholder="Cole o teor da intimação aqui...",
+                )
+                if texto_entrada.strip():
                     texto_para_analisar = texto_entrada
 
+            if st.button("🤖 Processar e Notificar", use_container_width=True):
                 if texto_para_analisar.strip():
-                    with st.spinner("Analisando com IA e notificando..."):
+                    with st.spinner("Analisando com IA, salvando e disparando alertas..."):
                         try:
+                            # 1. Analisa com a IA (logic.py)
                             resultado = analisar_com_gemini(texto_para_analisar)
+                            
+                            # 2. Salva no Supabase (logic.py)
                             salvar_no_banco(resultado)
                             
+                            # 3. Busca o WhatsApp correto do advogado logado
                             telefone_alvo = WHATSAPP_PADRAO
                             try:
                                 resp_adv = (
@@ -418,29 +428,15 @@ else:
                             except Exception:
                                 pass
 
+                            # 4. Dispara os alertas (E-mail + WhatsApp via Railway)
                             enviar_alertas(resultado, usuario_atual.email, telefone_alvo)
 
-                            st.success(f"Processo {resultado.get('processo')} processado!")
+                            st.success(f"Processo {resultado.get('processo')} processado com sucesso!")
                             st.rerun()
                         except Exception as e:
-                            st.error(f"Erro: {e}")
+                            st.error(f"Erro ao processar: {e}")
                 else:
-                    st.warning("Envie um PDF ou texto válido.")
-
-        try:
-            resposta_proc = (
-                supabase.table("processos")
-                .select("*")
-                .order("created_at", desc=True)
-                .execute()
-            )
-            df_processos = (
-                pd.DataFrame(resposta_proc.data)
-                if resposta_proc.data
-                else pd.DataFrame()
-            )
-        except Exception:
-            df_processos = pd.DataFrame()
+                    st.warning("Por favor, envie um PDF ou cole um texto válido antes de processar.")
 
         with aba_kanban:
             st.subheader("📌 Fluxo de Trabalho (Kanban)")
