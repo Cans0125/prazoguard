@@ -55,65 +55,100 @@ st.set_page_config(
 def processar_novos_emails():
     import imaplib
     import email
-    
-    print("🚀 [LOG] A função processar_novos_emails foi iniciada.")
+    from io import BytesIO
+    from pypdf import PdfReader
     
     IMAP_SERVER = "outlook.office365.com"
     EMAIL_USER = os.getenv("EMAIL_USER")
     EMAIL_PASS = os.getenv("EMAIL_PASS")
     
     if not EMAIL_USER or not EMAIL_PASS:
-        print("❌ [LOG] Credenciais de e-mail não encontradas no .env")
         return
 
     try:
-        print(f"🔍 [LOG] Conectando ao servidor IMAP para {EMAIL_USER}...")
         mail = imaplib.IMAP4_SSL(IMAP_SERVER)
         mail.login(EMAIL_USER, EMAIL_PASS)
-        print("✅ [LOG] Login IMAP realizado com sucesso.")
-        
         mail.select("inbox")
-        status, messages = mail.search(None, "UNSEEN")
-        
-        if status != "OK":
-            print("❌ [LOG] Erro ao buscar e-mails.")
-            return
 
-        print(f"📦 [LOG] Emails não lidos encontrados: {len(messages[0].split())}")
-        
-        if len(messages[0].split()) == 0:
-            print("💤 [LOG] Nenhum e-mail novo para processar.")
+        status, messages = mail.search(None, "UNSEEN")
+        if status != "OK" or not messages[0]:
+            mail.logout()
             return
 
         for num in messages[0].split():
-            print(f"📧 [LOG] Processando e-mail ID: {num.decode()}")
             status, data = mail.fetch(num, "(RFC822)")
-            
-            # ... (seu código de extração de texto continua igual aqui) ...
-            # (Vou pular a extração para não ficar longo, mas mantenha a sua)
-            # ...
-            
-            # Quando chegar na parte da IA e envio:
-            print("🧠 [LOG] Enviando para IA/Gemini...")
-            dados = analisar_com_gemini(corpo_texto)
-            print(f"✅ [LOG] IA analisou. Processo: {dados.get('processo')}")
-            
-            salvar_no_banco(dados)
-            print("💾 [LOG] Salvo no Supabase.")
-            
-            print("📱 [LOG] Tentando enviar WhatsApp...")
-            # Aqui vamos capturar o erro REAL do WhatsApp
-            try:
-                # (seu código de envio de whatsapp aqui)
-                print("✅ [LOG] Chamada de WhatsApp executada.")
-            except Exception as e:
-                print(f"❌ [LOG] ERRO CRÍTICO NO ENVIO WHATSAPP: {str(e)}")
+            if status != "OK":
+                continue
 
+            for response_part in data:
+                if isinstance(response_part, tuple):
+                    msg = email.message_from_bytes(response_part[1])
+                    
+                    corpo_texto = ""
+                    
+                    # 1. Tenta ler o texto do corpo do e-mail (caso tenha algo escrito)
+                    if msg.is_multipart():
+                        for part in msg.walk():
+                            content_type = part.get_content_type()
+                            content_disposition = str(part.get("Content-Disposition"))
+                            
+                            # Verifica se é um anexo PDF
+                            if "attachment" in content_disposition or part.get_filename():
+                                filename = part.get_filename()
+                                if filename and filename.lower().endswith(".pdf"):
+                                    try:
+                                        pdf_bytes = part.get_payload(decode=True)
+                                        if pdf_bytes:
+                                            # Lê o PDF anexado usando a mesma lógica do site
+                                            reader = PdfReader(BytesIO(pdf_bytes))
+                                            texto_pdf = ""
+                                            for page in reader.pages:
+                                                texto_pdf += page.extract_text() or ""
+                                            if texto_pdf.strip():
+                                                corpo_texto = texto_pdf
+                                                break
+                                    except Exception as e:
+                                        print(f"Erro ao ler PDF anexo: {e}")
+                            
+                            # Se não for anexo, tenta ler como texto normal
+                            elif content_type == "text/plain" and not corpo_texto:
+                                try:
+                                    corpo_texto = part.get_payload(decode=True).decode("utf-8", errors="ignore")
+                                except:
+                                    pass
+                    else:
+                        try:
+                            payload = msg.get_payload(decode=True)
+                            if payload:
+                                corpo_texto = payload.decode("utf-8", errors="ignore")
+                        except:
+                        pass
+
+                    # 2. Se achou texto (seja do corpo ou extraído do PDF anexo), processa!
+                    if corpo_texto and corpo_texto.strip():
+                        try:
+                            print(f"🤖 Processando conteúdo com IA...")
+                            dados = analisar_com_gemini(corpo_texto)
+                            salvar_no_banco(dados)
+                            
+                            # Dispara os alertas (E-mail e WhatsApp)
+                            enviar_alertas(
+                                dados, 
+                                os.getenv("EMAIL_PADRAO", EMAIL_USER), 
+                                os.getenv("WHATSAPP_PADRAO", "5531999996982")
+                            )
+                            print("✅ Alertas disparados com sucesso!")
+                        except Exception as e:
+                            print(f"❌ Erro ao processar dados: {e}")
+
+            # Marca o e-mail como lido para não processar de novo
+            mail.store(num, "+FLAGS", "\\Seen")
         mail.logout()
-        print("🏁 [LOG] Processamento finalizado.")
-        
     except Exception as e:
-        print(f"❌ [LOG] ERRO GERAL NO PROCESSAMENTO: {str(e)}")
+        print(f"❌ Erro na conexão IMAP: {e}")
+
+# Executa a varredura automaticamente assim que o site abre
+processar_novos_emails()
 
 # Configuração do Supabase
 SUPABASE_URL = os.getenv("SUPABASE_URL")
