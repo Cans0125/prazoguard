@@ -122,7 +122,7 @@ def processar_novos_emails():
                             if payload:
                                 corpo_texto = payload.decode("utf-8", errors="ignore")
                         except:
-                        pass
+                            pass
 
                     # 2. Se achou texto (seja do corpo ou extraído do PDF anexo), processa!
                     if corpo_texto and corpo_texto.strip():
