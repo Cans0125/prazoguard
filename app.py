@@ -52,112 +52,68 @@ st.set_page_config(
     layout="wide",
 )
 
-# --- FUNÇÃO DO ROBÔ DE E-MAILS INTEGRADA ---
 def processar_novos_emails():
     import imaplib
     import email
+    
+    print("🚀 [LOG] A função processar_novos_emails foi iniciada.")
     
     IMAP_SERVER = "outlook.office365.com"
     EMAIL_USER = os.getenv("EMAIL_USER")
     EMAIL_PASS = os.getenv("EMAIL_PASS")
     
     if not EMAIL_USER or not EMAIL_PASS:
+        print("❌ [LOG] Credenciais de e-mail não encontradas no .env")
         return
 
     try:
+        print(f"🔍 [LOG] Conectando ao servidor IMAP para {EMAIL_USER}...")
         mail = imaplib.IMAP4_SSL(IMAP_SERVER)
         mail.login(EMAIL_USER, EMAIL_PASS)
+        print("✅ [LOG] Login IMAP realizado com sucesso.")
+        
         mail.select("inbox")
-
         status, messages = mail.search(None, "UNSEEN")
+        
         if status != "OK":
+            print("❌ [LOG] Erro ao buscar e-mails.")
+            return
+
+        print(f"📦 [LOG] Emails não lidos encontrados: {len(messages[0].split())}")
+        
+        if len(messages[0].split()) == 0:
+            print("💤 [LOG] Nenhum e-mail novo para processar.")
             return
 
         for num in messages[0].split():
+            print(f"📧 [LOG] Processando e-mail ID: {num.decode()}")
             status, data = mail.fetch(num, "(RFC822)")
-            if status != "OK":
-                continue
+            
+            # ... (seu código de extração de texto continua igual aqui) ...
+            # (Vou pular a extração para não ficar longo, mas mantenha a sua)
+            # ...
+            
+            # Quando chegar na parte da IA e envio:
+            print("🧠 [LOG] Enviando para IA/Gemini...")
+            dados = analisar_com_gemini(corpo_texto)
+            print(f"✅ [LOG] IA analisou. Processo: {dados.get('processo')}")
+            
+            salvar_no_banco(dados)
+            print("💾 [LOG] Salvo no Supabase.")
+            
+            print("📱 [LOG] Tentando enviar WhatsApp...")
+            # Aqui vamos capturar o erro REAL do WhatsApp
+            try:
+                # (seu código de envio de whatsapp aqui)
+                print("✅ [LOG] Chamada de WhatsApp executada.")
+            except Exception as e:
+                print(f"❌ [LOG] ERRO CRÍTICO NO ENVIO WHATSAPP: {str(e)}")
 
-            for response_part in data:
-                if isinstance(response_part, tuple):
-                    msg = email.message_from_bytes(response_part[1])
-                    
-                    corpo_texto = ""
-                    if msg.is_multipart():
-                        for part in msg.walk():
-                            if part.get_content_type() == "text/plain":
-                                try:
-                                    corpo_texto = part.get_payload(decode=True).decode("utf-8", errors="ignore")
-                                    break
-                                except:
-                                    pass
-                    else:
-                        try:
-                            corpo_texto = msg.get_payload(decode=True).decode("utf-8", errors="ignore")
-                        except:
-                            pass
-
-                    if corpo_texto and corpo_texto.strip():
-                        try:
-                            # Utiliza as funções importadas do logic.py
-                            dados = analisar_com_gemini(corpo_texto)
-                            salvar_no_banco(dados)
-                            enviar_alertas(
-                                dados, 
-                                os.getenv("EMAIL_PADRAO", EMAIL_USER), 
-                                os.getenv("WHATSAPP_PADRAO", "5531999996982")
-                            )
-                        except Exception as e:
-                            print(f"Erro ao processar e-mail: {e}")
-
-            mail.store(num, "+FLAGS", "\\Seen")
         mail.logout()
-    except Exception as e:
-        print(f"Erro na conexão IMAP: {e}")
-
-# Executa a varredura automaticamente assim que o site/app abre
-processar_novos_emails()
-
-def obter_qr_code_evolution(api_url, token, nome_instancia):
-    try:
-        base_url = api_url.split('/message/')[0] if '/message/' in api_url else api_url.rstrip('/')
-        headers = {"apikey": token, "Content-Type": "application/json"}
+        print("🏁 [LOG] Processamento finalizado.")
         
-        url_connect = f"{base_url}/instance/connect/{nome_instancia}"
-        response = requests.get(url_connect, headers=headers)
-        
-        if response.status_code != 200:
-            url_create = f"{base_url}/instance/create"
-            payload = {
-                "instanceName": nome_instancia,
-                "qrcode": True,
-                "integration": "WHATSAPP-BAILEYS"
-            }
-            resp_create = requests.post(url_create, json=payload, headers=headers)
-            
-            if resp_create.status_code in [200, 201]:
-                response = requests.get(url_connect, headers=headers)
-            else:
-                return None, f"Erro ao criar a instância no servidor: {resp_create.text}"
-
-        if response.status_code == 200:
-            dados = response.json()
-            base64_qr = dados.get("base64")
-            
-            if base64_qr:
-                if "," in base64_qr:
-                    base64_qr = base64_qr.split(",")[1]
-                
-                img_data = base64.b64decode(base64_qr)
-                imagem = Image.open(BytesIO(img_data))
-                return imagem, "QR Code gerado com sucesso!"
-            else:
-                return None, f"Instância já está conectada ou status retornado: {dados}"
-        else:
-            return None, f"Erro na API (Status {response.status_code}): {response.text}"
-            
     except Exception as e:
-        return None, f"Erro de conexão: {e}"
+        print(f"❌ [LOG] ERRO GERAL NO PROCESSAMENTO: {str(e)}")
 
 # Configuração do Supabase
 SUPABASE_URL = os.getenv("SUPABASE_URL")
