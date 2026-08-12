@@ -51,95 +51,6 @@ st.set_page_config(
     layout="wide",
 )
 
-def processar_novos_emails():
-    import imaplib
-    import email
-    
-    IMAP_SERVER = "outlook.office365.com"
-    EMAIL_USER = os.getenv("EMAIL_USER")
-    EMAIL_PASS = os.getenv("EMAIL_PASS")
-    
-    if not EMAIL_USER or not EMAIL_PASS:
-        return
-
-    try:
-        mail = imaplib.IMAP4_SSL(IMAP_SERVER)
-        mail.login(EMAIL_USER, EMAIL_PASS)
-        mail.select("inbox")
-
-        status, messages = mail.search(None, "UNSEEN")
-        if status != "OK" or not messages[0]:
-            mail.logout()
-            return
-
-        for num in messages[0].split():
-            status, data = mail.fetch(num, "(RFC822)")
-            if status != "OK":
-                continue
-
-            for response_part in data:
-                if isinstance(response_part, tuple):
-                    msg = email.message_from_bytes(response_part[1])
-                    
-                    corpo_texto = ""
-                    
-                    if msg.is_multipart():
-                        for part in msg.walk():
-                            content_type = part.get_content_type()
-                            content_disposition = str(part.get("Content-Disposition"))
-                            
-                            if "attachment" in content_disposition or part.get_filename():
-                                filename = part.get_filename()
-                                if filename and filename.lower().endswith(".pdf"):
-                                    try:
-                                        pdf_bytes = part.get_payload(decode=True)
-                                        if pdf_bytes:
-                                            reader = PdfReader(BytesIO(pdf_bytes))
-                                            texto_pdf = ""
-                                            for page in reader.pages:
-                                                texto_pdf += page.extract_text() or ""
-                                            if texto_pdf.strip():
-                                                corpo_texto = texto_pdf
-                                                break
-                                    except Exception as e:
-                                        print(f"Erro ao ler PDF anexo: {e}")
-                            
-                            elif content_type == "text/plain" and not corpo_texto:
-                                try:
-                                    corpo_texto = part.get_payload(decode=True).decode("utf-8", errors="ignore")
-                                except:
-                                    pass
-                    else:
-                        try:
-                            payload = msg.get_payload(decode=True)
-                            if payload:
-                                corpo_texto = payload.decode("utf-8", errors="ignore")
-                        except:
-                            pass
-
-                    if corpo_texto and corpo_texto.strip():
-                        try:
-                            print(f"🤖 Processando conteúdo com IA...")
-                            dados = analisar_com_gemini(corpo_texto)
-                            salvar_no_banco(dados)
-                            
-                            enviar_alertas(
-                                dados, 
-                                os.getenv("EMAIL_PADRAO", EMAIL_USER), 
-                                os.getenv("WHATSAPP_PADRAO", "5531999996982")
-                            )
-                            print("✅ Alertas disparados com sucesso!")
-                        except Exception as e:
-                            print(f"❌ Erro ao processar dados: {e}")
-
-            mail.store(num, "+FLAGS", "\\Seen")
-        mail.logout()
-    except Exception as e:
-        print(f"❌ Erro na conexão IMAP: {e}")
-
-# Executa a varredura automaticamente assim que o site abre
-processar_novos_emails()
-
 # Configuração do Supabase
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
@@ -218,6 +129,29 @@ def atualizar_status_kanban(processo_id, novo_status):
         ).execute()
     except Exception as e:
         st.error(f"Erro ao atualizar Kanban: {e}")
+
+def exibir_radar_urgencia(df_processos):
+    if df_processos.empty:
+        return
+
+    st.markdown("### 🚨 Radar de Prazos Críticos")
+    col1, col2, col3 = st.columns(3)
+    try:
+        urgentes = df_processos[df_processos["prazo_dias"] <= 3]
+        atencao = df_processos[(df_processos["prazo_dias"] > 3) & (df_processos["prazo_dias"] <= 7)]
+        seguros = df_processos[df_processos["prazo_dias"] > 7]
+        
+        with col1:
+            st.metric(label="🔴 Vencimento Urgente (≤ 3 dias)", value=len(urgentes))
+        with col2:
+            st.metric(label="🟡 Atenção (4 a 7 dias)", value=len(atencao))
+        with col3:
+            st.metric(label="🟢 No Prazo (> 7 dias)", value=len(seguros))
+            
+        if not urgentes.empty:
+            st.warning("⚠️ **Atenção Advogado!** Existem processos com prazos prestes a vencer listados abaixo no Kanban.")
+    except Exception:
+        pass
 
 estilo_css = """
 <style>
@@ -377,11 +311,10 @@ else:
             "👥 Equipe",
         ])
 
-    with st.sidebar:
+        with st.sidebar:
             st.markdown("---")
             st.header("📥 Nova Intimação")
             
-            # Abas na barra lateral para escolher entre PDF ou Texto
             tipo_entrada = st.radio("Forma de Envio:", ["📄 Enviar PDF", "📝 Colar Texto"], horizontal=True)
             
             texto_para_analisar = ""
@@ -408,13 +341,9 @@ else:
                 if texto_para_analisar.strip():
                     with st.spinner("Analisando com IA, salvando e disparando alertas..."):
                         try:
-                            # 1. Analisa com a IA (logic.py)
                             resultado = analisar_com_gemini(texto_para_analisar)
-                            
-                            # 2. Salva no Supabase (logic.py)
                             salvar_no_banco(resultado)
                             
-                            # 3. Busca o WhatsApp correto do advogado logado
                             telefone_alvo = WHATSAPP_PADRAO
                             try:
                                 resp_adv = (
@@ -428,7 +357,6 @@ else:
                             except Exception:
                                 pass
 
-                            # 4. Dispara os alertas (E-mail + WhatsApp via Railway)
                             enviar_alertas(resultado, usuario_atual.email, telefone_alvo)
 
                             st.success(f"Processo {resultado.get('processo')} processado com sucesso!")
@@ -438,7 +366,24 @@ else:
                 else:
                     st.warning("Por favor, envie um PDF ou cole um texto válido antes de processar.")
 
-    with aba_kanban:
+        try:
+            resposta_proc = (
+                supabase.table("processos")
+                .select("*")
+                .order("created_at", desc=True)
+                .execute()
+            )
+            df_processos = (
+                pd.DataFrame(resposta_proc.data)
+                if resposta_proc.data
+                else pd.DataFrame()
+            )
+        except Exception:
+            df_processos = pd.DataFrame()
+
+        exibir_radar_urgencia(df_processos)
+
+        with aba_kanban:
             st.subheader("📌 Fluxo de Trabalho (Kanban)")
             if not df_processos.empty:
                 col_k1, col_k2, col_k3 = st.columns(3)
@@ -480,14 +425,14 @@ else:
             else:
                 st.info("Nenhum processo cadastrado para o Kanban.")
 
-    with aba_tabela:
+        with aba_tabela:
             st.subheader("📋 Lista Completa de Prazos")
             if not df_processos.empty:
                 st.dataframe(df_processos, use_container_width=True, hide_index=True)
             else:
                 st.info("Nenhum registro encontrado.")
 
-    with aba_minutas:
+        with aba_minutas:
             st.subheader("✍️ Gerador de Minutas Preliminares com IA")
             if not df_processos.empty:
                 lista_procs = df_processos["processo"].tolist()
@@ -513,7 +458,7 @@ else:
             else:
                 st.info("Cadastre um processo primeiro para gerar minutas.")
 
-    with aba_cnj:
+        with aba_cnj:
             st.subheader("🔍 Consulta Oficial de Andamentos (DataJud - CNJ)")
             st.markdown("Consulte metadados e movimentações diretamente da base nacional unificada do Poder Judiciário.")
 
