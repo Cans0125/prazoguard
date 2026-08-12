@@ -52,6 +52,72 @@ st.set_page_config(
     layout="wide",
 )
 
+# --- FUNÇÃO DO ROBÔ DE E-MAILS INTEGRADA ---
+def processar_novos_emails():
+    import imaplib
+    import email
+    
+    IMAP_SERVER = "outlook.office365.com"
+    EMAIL_USER = os.getenv("EMAIL_USER")
+    EMAIL_PASS = os.getenv("EMAIL_PASS")
+    
+    if not EMAIL_USER or not EMAIL_PASS:
+        return
+
+    try:
+        mail = imaplib.IMAP4_SSL(IMAP_SERVER)
+        mail.login(EMAIL_USER, EMAIL_PASS)
+        mail.select("inbox")
+
+        status, messages = mail.search(None, "UNSEEN")
+        if status != "OK":
+            return
+
+        for num in messages[0].split():
+            status, data = mail.fetch(num, "(RFC822)")
+            if status != "OK":
+                continue
+
+            for response_part in data:
+                if isinstance(response_part, tuple):
+                    msg = email.message_from_bytes(response_part[1])
+                    
+                    corpo_texto = ""
+                    if msg.is_multipart():
+                        for part in msg.walk():
+                            if part.get_content_type() == "text/plain":
+                                try:
+                                    corpo_texto = part.get_payload(decode=True).decode("utf-8", errors="ignore")
+                                    break
+                                except:
+                                    pass
+                    else:
+                        try:
+                            corpo_texto = msg.get_payload(decode=True).decode("utf-8", errors="ignore")
+                        except:
+                            pass
+
+                    if corpo_texto and corpo_texto.strip():
+                        try:
+                            # Utiliza as funções importadas do logic.py
+                            dados = analisar_com_gemini(corpo_texto)
+                            salvar_no_banco(dados)
+                            enviar_alertas(
+                                dados, 
+                                os.getenv("EMAIL_PADRAO", EMAIL_USER), 
+                                os.getenv("WHATSAPP_PADRAO", "5531999996982")
+                            )
+                        except Exception as e:
+                            print(f"Erro ao processar e-mail: {e}")
+
+            mail.store(num, "+FLAGS", "\\Seen")
+        mail.logout()
+    except Exception as e:
+        print(f"Erro na conexão IMAP: {e}")
+
+# Executa a varredura automaticamente assim que o site/app abre
+processar_novos_emails()
+
 def obter_qr_code_evolution(api_url, token, nome_instancia):
     try:
         base_url = api_url.split('/message/')[0] if '/message/' in api_url else api_url.rstrip('/')
@@ -460,7 +526,8 @@ else:
 
                 if st.button("✨ Gerar Minuta com Inteligência Artificial"):
                     with st.spinner("Redigindo rascunho de petição..."):
-                        minuta_gerada = gerar_minuta_com_gemini(
+                        minuta_gerada = gerar_minuta_com_
+                        (
                             proc_escolhido, dado_proc["resumo"]
                         )
                         st.markdown("### Rascunho Gerado:")
