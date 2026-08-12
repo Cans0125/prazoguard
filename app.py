@@ -1,32 +1,31 @@
-from datetime import datetime, timezone
 import os
+import json
+import uuid
+import base64
+from io import BytesIO
+from datetime import datetime, timezone
 from dotenv import load_dotenv
-from supabase import create_client
-import google.generativeai as genai
-from pydantic import BaseModel, Field
-from pypdf import PdfReader
+
+# --- CARREGA AS CHAVES SECRETAS PRIMEIRO ---
+load_dotenv()
+
+import streamlit as st
 import pandas as pd
 import requests
 import resend
-import streamlit as st
 import stripe
-import base64
-from io import BytesIO
 from PIL import Image
 import streamlit.components.v1 as components
-import json
-import uuid
+from pypdf import PdfReader
+import google.generativeai as genai
+from supabase import create_client
 
 # --- IMPORTAÇÕES DO ARQUIVO CENTRAL (logic.py) ---
 from logic import analisar_com_gemini, salvar_no_banco, enviar_alertas, obter_qr_code_evolution
 
-# --- CARREGA AS CHAVES SECRETAS DO ARQUIVO .ENV ---
-load_dotenv()
-
 # --- PARTE SEGURA CONFIGURADA DO GOOGLE ANALYTICS ---
 measurement_id = os.environ.get("GA_MEASUREMENT_ID", "G-2C08DBH6ZW")
 api_secret = os.environ.get("GA_API_SECRET", "yom4EITQR5eKX5MgLBjNsg") 
-
 base_url = "https://www.google-analytics.com/mp/collect"
 url_ga = f"{base_url}?measurement_id={measurement_id}&api_secret={api_secret}"
 
@@ -55,8 +54,6 @@ st.set_page_config(
 def processar_novos_emails():
     import imaplib
     import email
-    from io import BytesIO
-    from pypdf import PdfReader
     
     IMAP_SERVER = "outlook.office365.com"
     EMAIL_USER = os.getenv("EMAIL_USER")
@@ -86,20 +83,17 @@ def processar_novos_emails():
                     
                     corpo_texto = ""
                     
-                    # 1. Tenta ler o texto do corpo do e-mail (caso tenha algo escrito)
                     if msg.is_multipart():
                         for part in msg.walk():
                             content_type = part.get_content_type()
                             content_disposition = str(part.get("Content-Disposition"))
                             
-                            # Verifica se é um anexo PDF
                             if "attachment" in content_disposition or part.get_filename():
                                 filename = part.get_filename()
                                 if filename and filename.lower().endswith(".pdf"):
                                     try:
                                         pdf_bytes = part.get_payload(decode=True)
                                         if pdf_bytes:
-                                            # Lê o PDF anexado usando a mesma lógica do site
                                             reader = PdfReader(BytesIO(pdf_bytes))
                                             texto_pdf = ""
                                             for page in reader.pages:
@@ -110,7 +104,6 @@ def processar_novos_emails():
                                     except Exception as e:
                                         print(f"Erro ao ler PDF anexo: {e}")
                             
-                            # Se não for anexo, tenta ler como texto normal
                             elif content_type == "text/plain" and not corpo_texto:
                                 try:
                                     corpo_texto = part.get_payload(decode=True).decode("utf-8", errors="ignore")
@@ -124,14 +117,12 @@ def processar_novos_emails():
                         except:
                             pass
 
-                    # 2. Se achou texto (seja do corpo ou extraído do PDF anexo), processa!
                     if corpo_texto and corpo_texto.strip():
                         try:
                             print(f"🤖 Processando conteúdo com IA...")
                             dados = analisar_com_gemini(corpo_texto)
                             salvar_no_banco(dados)
                             
-                            # Dispara os alertas (E-mail e WhatsApp)
                             enviar_alertas(
                                 dados, 
                                 os.getenv("EMAIL_PADRAO", EMAIL_USER), 
@@ -141,7 +132,6 @@ def processar_novos_emails():
                         except Exception as e:
                             print(f"❌ Erro ao processar dados: {e}")
 
-            # Marca o e-mail como lido para não processar de novo
             mail.store(num, "+FLAGS", "\\Seen")
         mail.logout()
     except Exception as e:
@@ -271,7 +261,7 @@ if st.session_state.user is None:
             email_login = st.text_input("E-mail cadastrado")
             senha_login = st.text_input("Senha", type="password")
             btn_entrar = st.form_submit_button(
-                "Entrar no Sistema", width='stretch'
+                "Entrar no Sistema", use_container_width=True
             )
 
             if btn_entrar:
@@ -294,7 +284,7 @@ if st.session_state.user is None:
             email_cad = st.text_input("E-mail para cadastro")
             senha_cad = st.text_input("Crie uma senha forte", type="password")
             btn_cadastrar = st.form_submit_button(
-                "Criar Conta (30 dias Grátis)", width='stretch'
+                "Criar Conta (30 dias Grátis)", use_container_width=True
             )
 
             if btn_cadastrar:
@@ -342,7 +332,7 @@ else:
         st.markdown("📧 **denerpneto@hotmail.com**")
         
         st.markdown("---")
-        if st.button("🚪 Sair / Logout", width='stretch'):
+        if st.button("🚪 Sair / Logout", use_container_width=True):
             supabase.auth.sign_out()
             st.session_state.user = None
             st.rerun()
@@ -360,7 +350,7 @@ else:
                     img_qr, mensagem = obter_qr_code_evolution(WHATSAPP_API_URL, WHATSAPP_TOKEN, nome_instancia_input)
                     if img_qr:
                         st.sidebar.success("Escaneie o QR Code abaixo com o WhatsApp:")
-                        st.sidebar.image(img_qr, width='stretch')
+                        st.sidebar.image(img_qr, use_container_width=True)
                     else:
                         st.sidebar.info(mensagem)
             else:
@@ -397,7 +387,7 @@ else:
                 placeholder="Cole aqui...",
             )
 
-            if st.button("🤖 Processar e Notificar", width='stretch'):
+            if st.button("🤖 Processar e Notificar", use_container_width=True):
                 texto_para_analisar = ""
                 if arquivo_enviado is not None:
                     try:
@@ -412,7 +402,6 @@ else:
                 if texto_para_analisar.strip():
                     with st.spinner("Analisando com IA e notificando..."):
                         try:
-                            # Utiliza a função importada do logic.py
                             resultado = analisar_com_gemini(texto_para_analisar)
                             salvar_no_banco(resultado)
                             
@@ -429,7 +418,6 @@ else:
                             except Exception:
                                 pass
 
-                            # Dispara os alertas via logic.py
                             enviar_alertas(resultado, usuario_atual.email, telefone_alvo)
 
                             st.success(f"Processo {resultado.get('processo')} processado!")
@@ -499,7 +487,7 @@ else:
         with aba_tabela:
             st.subheader("📋 Lista Completa de Prazos")
             if not df_processos.empty:
-                st.dataframe(df_processos, width='stretch', hide_index=True)
+                st.dataframe(df_processos, use_container_width=True, hide_index=True)
             else:
                 st.info("Nenhum registro encontrado.")
 
@@ -517,8 +505,7 @@ else:
 
                 if st.button("✨ Gerar Minuta com Inteligência Artificial"):
                     with st.spinner("Redigindo rascunho de petição..."):
-                        minuta_gerada = gerar_minuta_com_
-                        (
+                        minuta_gerada = gerar_minuta_com_gemini(
                             proc_escolhido, dado_proc["resumo"]
                         )
                         st.markdown("### Rascunho Gerado:")
@@ -608,7 +595,7 @@ else:
                             st.error(f"Erro de conexão com os servidores do DataJud: {e}")
                 else:
                     st.warning("Insira um número CNJ válido.")
-       
+        
         with aba_advogados:
             st.subheader("👥 Cadastro da Equipe Jurídica")
             col_form, col_lista = st.columns([1, 1.5])
@@ -644,7 +631,7 @@ else:
                         pd.DataFrame(resp_adv.data) if resp_adv.data else pd.DataFrame()
                     )
                     if not df_adv.empty:
-                        st.dataframe(df_adv, width='stretch', hide_index=True)
+                        st.dataframe(df_adv, use_container_width=True, hide_index=True)
                 except Exception:
                     pass
     else:
@@ -661,7 +648,7 @@ else:
                 ["Plano Individual (R$ 97 / mês)", "Plano Escritório (R$ 197 / mês)"],
             )
             if st.button(
-                "🚀 Assinar e Liberar Acesso Definitivo", width='stretch'
+                "🚀 Assinar e Liberar Acesso Definitivo", use_container_width=True
             ):
                 price_id = (
                     "price_cole_aqui_o_id_do_individual_97"
